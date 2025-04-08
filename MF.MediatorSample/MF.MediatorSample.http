@@ -1,0 +1,20 @@
+@MF.MediatorSample_HostAddress = http://localhost:5054
+
+GET {{MF.MediatorSample_HostAddress}}/artists/
+Accept: application/json
+
+###
+
+POST {{MF.MediatorSample_HostAddress}}/artists/
+Content-Type: application/json
+
+{
+}
+
+###
+
+PUT {{MF.MediatorSample_HostAddress}}/artists/
+Content-Type: application/json
+
+{
+}
