@@ -1,5 +1,4 @@
 ﻿using MiF.Mediator.Interfaces;
-using MiF.MediatorSample.Features.Artists;
 
 namespace MiF.MediatorSample.Features.Artists.Commands.Add;
 

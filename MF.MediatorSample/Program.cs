@@ -1,9 +1,9 @@
-using MiF.MediatorSample.Features.Artists.Commands.Add;
-using MiF.MediatorSample.Features.Artists.Commands.Update;
 using Microsoft.AspNetCore.Mvc;
 using MiF.Mediator.DependencyInjection;
 using MiF.Mediator.Interfaces;
 using MiF.MediatorSample.Features.Artists;
+using MiF.MediatorSample.Features.Artists.Commands.Add;
+using MiF.MediatorSample.Features.Artists.Commands.Update;
 using MiF.MediatorSample.Features.Artists.Query.List;
 
 var builder = WebApplication.CreateBuilder(args);
