@@ -1,6 +1,5 @@
 ﻿using MiF.Mediator.Interfaces;
 using Moq;
-using System.ComponentModel.DataAnnotations;
 
 namespace MiF.MediatorUnitTests;
 
@@ -12,7 +11,7 @@ public class MediatorTests
         // Arrange
         var mockServiceFactory = new Mock<IServiceFactory>();
         var mockRequestProcessor = new Mock<IRequestProcessor<SampleRequest, string>>();
-        var request = new SampleRequest { RequestData = "" };
+        var request = new SampleRequest { RequestData = "TestRequet" };
 
         mockRequestProcessor
             .Setup(processor => processor.HandleAsync(request, It.IsAny<CancellationToken>()))
@@ -25,7 +24,7 @@ public class MediatorTests
         var mediator = new MiF.Mediator.Mediator(mockServiceFactory.Object);
 
         // Act
-        var result = await mediator.SendMessageAsync(request, CancellationToken.None);
+        var result = await mediator.SendMessageAsync(request);
 
         // Assert
         Assert.NotNull(result);
@@ -47,12 +46,11 @@ public class MediatorTests
         var mediator = new MiF.Mediator.Mediator(mockServiceFactory.Object);
 
         // Act & Assert
-        await Assert.ThrowsAsync<ArgumentException>(() => mediator.SendMessageAsync(request, CancellationToken.None));
+        await Assert.ThrowsAsync<ArgumentException>(() => mediator.SendMessageAsync(request));
     }
 }
 
 public class SampleRequest : IRequest<string>
 {
-    [Required]
     public string? RequestData { get; set; } = string.Empty;
 }
