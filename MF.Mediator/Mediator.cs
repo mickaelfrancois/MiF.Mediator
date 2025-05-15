@@ -7,7 +7,7 @@ public class Mediator(IServiceFactory serviceFactory) : IMediator
 {
     private readonly IServiceFactory _serviceFactory = serviceFactory;
 
-    public Task<TResponse> HandleAsync<TResponse>(IRequest<TResponse> message, CancellationToken cancellationToken = default)
+    public Task<TResponse> SendMessageAsync<TResponse>(IRequest<TResponse> message, CancellationToken cancellationToken = default)
     {
         Type targetType = message.GetType();
         Type targetHandler = typeof(IRequestProcessor<,>).MakeGenericType(targetType, typeof(TResponse));

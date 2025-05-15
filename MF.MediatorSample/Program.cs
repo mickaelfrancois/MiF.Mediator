@@ -23,21 +23,21 @@ app.UseHttpsRedirection();
 
 app.MapGet("/artists", async ([FromServices] ILogger<Program> logger, [FromServices] IMediator mediator) =>
     {
-        ListArtistsQueryResponse response = await mediator.HandleAsync(new ListArtistsQuery());
+        ListArtistsQueryResponse response = await mediator.SendMessageAsync(new ListArtistsQuery());
         return TypedResults.Ok(response.Artists);
     })
 .WithName("GetArtists");
 
 app.MapPost("/artists", async ([FromServices] ILogger<Program> logger, [FromServices] IMediator mediator) =>
 {
-    ArtistDto artistCreated = await mediator.HandleAsync(new AddArtistCommand() { Name = "Bon jovi", Year = 1983 });
+    ArtistDto artistCreated = await mediator.SendMessageAsync(new AddArtistCommand() { Name = "Bon jovi", Year = 1983 });
     return TypedResults.Ok(artistCreated);
 })
 .WithName("AddArtist");
 
 app.MapPut("/artists", async ([FromServices] ILogger<Program> logger, [FromServices] IMediator mediator) =>
 {
-    await mediator.HandleAsync(new UpdateArtistCommand() { Name = "Bon jovi", Year = 1985 });
+    await mediator.SendMessageAsync(new UpdateArtistCommand() { Name = "Bon jovi", Year = 1985 });
     return TypedResults.NoContent();
 })
 .WithName("UpdateArtist");
