@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using MiF.Mediator;
 using MiF.Mediator.DependencyInjection;
 using MiF.Mediator.Interfaces;
 using MiF.MediatorSample.Features.Artists;
@@ -9,6 +10,11 @@ using MiF.MediatorSample.Features.Artists.Query.List;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddLogging();
+
+// Declare a validation service as scoped service. Mediator will automatically use it to validate queries and commands models.
+builder.Services.AddScoped<IValidationService, ValidationService>();
+
+// Declare Mediator service as scoped service
 builder.Services.AddSimpleMediator();
 builder.Services.AddOpenApi();
 

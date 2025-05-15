@@ -57,6 +57,9 @@ Integrate the library with your preferred DI container by registering handlers a
 - **CQRS (Command Query Responsibility Segregation)**: Separate read and write operations in your application.
 - **Decoupled Architecture**: Reduce dependencies between components by centralizing communication.
 - **Asynchronous Processing**: Handle long-running operations or external API calls efficiently.
+- **Event Sourcing**: Use the mediator to handle events and commands in an event-sourced architecture.
+- **Unit Testing**: Easily mock the mediator and handlers for unit tests.
+- **Validation**: Implement validation logic in handlers to ensure data integrity before processing commands.
 
 ## Contributing
 
