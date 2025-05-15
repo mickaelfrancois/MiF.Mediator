@@ -43,7 +43,7 @@ var serviceFactory = new MyServiceFactory();
 var mediator = new Mediator(serviceFactory);
 
 var query = new GetUserQuery { UserId = 1 }; 
-var user = await mediator.HandleAsync(query);
+var user = await mediator.SendMessageAsync(query);
 
 Console.WriteLine($"User: {user.Name}");
 ```
