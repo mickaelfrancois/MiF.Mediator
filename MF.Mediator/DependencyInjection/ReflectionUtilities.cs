@@ -1,64 +1,60 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+﻿using global::MiF.Mediator.Interfaces;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
-using MiF.Mediator.Interfaces;
 using System.Reflection;
 
 namespace MiF.Mediator.DependencyInjection;
+
 public static class ReflectionUtilities
 {
     public static void AddSimpleMediatorClasses(IServiceCollection services, IEnumerable<Assembly> assembliesToScan)
     {
-        assembliesToScan = (assembliesToScan as Assembly[] ?? assembliesToScan).Distinct().ToArray();
+        Assembly[] assemblies = (assembliesToScan as Assembly[] ?? assembliesToScan).Distinct().ToArray();
 
-        Type[] openCommandAndQueryInterfaces =
-        [
-                typeof(IQueryHandler<,>),
-                typeof(ICommandHandler<>),
-                typeof(ICommandHandler<,>),
-        ];
+        Type[] openCommandAndQueryInterfaces = new[]
+        {
+            typeof(IQueryHandler<,>),
+            typeof(ICommandHandler<>),
+            typeof(ICommandHandler<,>),
+        };
 
-        Type[] openEventInterfaces =
-        [
-                typeof(IEventHandler<>),
-        ];
+        Type[] openEventInterfaces = new[]
+        {
+            typeof(IEventHandler<>),
+        };
 
-        AddInterfacesAsTransient(openCommandAndQueryInterfaces, services, assembliesToScan, false);
-        AddInterfacesAsTransient(openEventInterfaces, services, assembliesToScan, true);
+        AddInterfacesAsTransient(openCommandAndQueryInterfaces, services, assemblies, addIfAlreadyExists: false);
+        AddInterfacesAsTransient(openEventInterfaces, services, assemblies, addIfAlreadyExists: true);
     }
-
 
     public static IServiceCollection AddSimpleMediatorPreProcessor(IServiceCollection services, IEnumerable<Assembly> assembliesToScan)
     {
-        var multiOpenInterfaces = new[]
+        Type[] multiOpenInterfaces = new[]
         {
-                typeof(IRequestPreProcessor<,>)
+            typeof(IRequestPreProcessor<,>)
         };
 
-        foreach (var multiOpenInterface in multiOpenInterfaces)
+        Type[] types = (assembliesToScan as Assembly[] ?? assembliesToScan)
+            .SelectMany(a => a.DefinedTypes)
+            .Select(t => t.AsType())
+            .ToArray();
+
+        foreach (Type multiOpenInterface in multiOpenInterfaces)
         {
-            List<Type> concretions = [];
-
-            foreach (TypeInfo? type in assembliesToScan.SelectMany(a => a.DefinedTypes))
-            {
-                IEnumerable<Type> interfaceTypes = type.FindInterfacesThatClose(multiOpenInterface).ToArray();
-
-                if (!interfaceTypes.Any())
-                    continue;
-
-                if (type.IsConcrete())
-                    concretions.Add(type);
-            }
+            List<Type> concretions = types
+                .Where(t => t.FindInterfacesThatClose(multiOpenInterface).Any())
+                .Where(t => t.IsConcrete())
+                .ToList();
 
             // Always add every middleware
             foreach (Type c in concretions)
             {
                 if (!c.IsGenericType)
                 {
-                    IEnumerable<Type> interfaceTypes = c.FindInterfacesThatClose(multiOpenInterface).ToArray();
-
-                    foreach (var type in interfaceTypes)
+                    Type[] interfaceTypes = c.FindInterfacesThatClose(multiOpenInterface).ToArray();
+                    foreach (Type it in interfaceTypes)
                     {
-                        services.AddTransient(type, c);
+                        services.AddTransient(it, c);
                     }
                 }
                 else
@@ -66,8 +62,7 @@ public static class ReflectionUtilities
                     services.AddTransient(multiOpenInterface, c);
                 }
 
-                // This is needed because MS DI doesn't support constrained items,
-                // the service factory method registered in this class catches the argument exception and tries to resolve implemented types
+                // MS DI doesn't support constrained generic registrations; still register concrete for factory fallback
                 services.AddTransient(c);
             }
         }
@@ -75,18 +70,21 @@ public static class ReflectionUtilities
         return services;
     }
 
-
     private static void AddInterfacesAsTransient(Type[] openMessageInterfaces, IServiceCollection services, IEnumerable<Assembly> assembliesToScan, bool addIfAlreadyExists)
     {
+        Type[] types = (assembliesToScan as Assembly[] ?? assembliesToScan)
+            .SelectMany(a => a.DefinedTypes)
+            .Select(t => t.AsType())
+            .ToArray();
+
         foreach (Type openInterface in openMessageInterfaces)
         {
-            List<Type> concretions = [];
-            List<Type> interfaces = [];
+            List<Type> concretions = new();
+            List<Type> interfaces = new();
 
-            foreach (TypeInfo? type in assembliesToScan.SelectMany(a => a.DefinedTypes))
+            foreach (Type type in types)
             {
-                IEnumerable<Type> interfaceTypes = type.FindInterfacesThatClose(openInterface).ToArray();
-
+                Type[] interfaceTypes = type.FindInterfacesThatClose(openInterface).ToArray();
                 if (!interfaceTypes.Any())
                     continue;
 
@@ -95,19 +93,21 @@ public static class ReflectionUtilities
 
                 foreach (Type interfaceType in interfaceTypes)
                 {
-                    if (interfaceType.GetInterfaces().Length != 0)
+                    Type[] implemented = interfaceType.GetInterfaces();
+                    if (implemented.Length != 0)
                     {
                         // Register the MessageHandler instead of ICommand/Query/EventHandler
-                        interfaces.AddRange(interfaceType.GetInterfaces());
+                        interfaces.AddRange(implemented);
                     }
                     else
                     {
-                        interfaces.Fill(interfaceType);
+                        if (!interfaces.Contains(interfaceType))
+                            interfaces.Add(interfaceType);
                     }
                 }
             }
 
-            foreach (Type? @interface in interfaces.Distinct())
+            foreach (Type @interface in interfaces.Distinct())
             {
                 List<Type> matches = concretions.Where(t => t.CanBeCastTo(@interface)).ToList();
 
@@ -140,43 +140,46 @@ public static class ReflectionUtilities
 
         if (handlerType.IsInterface)
         {
-            if (handlerType.GenericTypeArguments.SequenceEqual(handlerInterface.GenericTypeArguments))
-                return true;
+            return handlerType.GenericTypeArguments.SequenceEqual(handlerInterface.GenericTypeArguments);
         }
         else
         {
-            return IsMatchingWithInterface(handlerType.GetInterface(handlerInterface.Name)!, handlerInterface);
+            Type? iface = handlerType.GetInterface(handlerInterface.Name);
+            return iface != null && IsMatchingWithInterface(iface, handlerInterface);
         }
-
-        return false;
     }
 
     private static void AddConcretionsThatCouldBeClosed(Type @interface, List<Type> concretions, IServiceCollection services)
     {
-        foreach (Type? type in concretions.Where(x => x.IsOpenGeneric() && x.CouldCloseTo(@interface)))
+        foreach (Type type in concretions.Where(x => x.IsOpenGeneric() && x.CouldCloseTo(@interface)))
         {
             try
             {
-                services.TryAddTransient(@interface, type.MakeGenericType(@interface.GenericTypeArguments));
+                Type closed = type.MakeGenericType(@interface.GenericTypeArguments);
+                services.TryAddTransient(@interface, closed);
             }
-            catch (Exception)
+            catch
             {
+                // ignore types that cannot be made
             }
         }
     }
 
     private static bool CouldCloseTo(this Type openConcretion, Type closedInterface)
     {
+        if (!openConcretion.IsGenericTypeDefinition)
+            return false;
+
         Type openInterface = closedInterface.GetGenericTypeDefinition();
         Type[] arguments = closedInterface.GenericTypeArguments;
-        Type[] concreteArguments = openConcretion.GenericTypeArguments;
+        Type[] concreteParameters = openConcretion.GetGenericArguments();
 
-        return arguments.Length == concreteArguments.Length && openConcretion.CanBeCastTo(openInterface);
+        return arguments.Length == concreteParameters.Length && openConcretion.CanBeCastTo(openInterface);
     }
 
     private static bool CanBeCastTo(this Type pluggedType, Type pluginType)
     {
-        if (pluggedType == null)
+        if (pluggedType == null || pluginType == null)
             return false;
 
         if (pluggedType == pluginType)
@@ -192,38 +195,38 @@ public static class ReflectionUtilities
 
     private static IEnumerable<Type> FindInterfacesThatClose(this Type pluggedType, Type templateType)
     {
-        if (!pluggedType.IsConcrete())
+        if (pluggedType == null || !pluggedType.IsConcrete())
             yield break;
 
         if (templateType.GetTypeInfo().IsInterface)
         {
-            foreach (Type? interfaceType in pluggedType.GetTypeInfo().ImplementedInterfaces.Where(type => type.GetTypeInfo().IsGenericType && type.GetGenericTypeDefinition() == templateType))
+            foreach (Type? interfaceType in pluggedType.GetInterfaces()
+                         .Where(i => i.GetTypeInfo().IsGenericType && i.GetGenericTypeDefinition() == templateType))
             {
                 yield return interfaceType;
             }
         }
-        else if (pluggedType.GetTypeInfo().BaseType!.GetTypeInfo().IsGenericType && pluggedType.GetTypeInfo().BaseType!.GetGenericTypeDefinition() == templateType)
+        else
         {
-            yield return pluggedType.GetTypeInfo().BaseType!;
-        }
+            // Walk base type chain to find generic base types matching templateType
+            Type? current = pluggedType;
+            while (current != null && current != typeof(object))
+            {
+                Type? baseType = current.BaseType;
+                if (baseType != null && baseType.GetTypeInfo().IsGenericType && baseType.GetGenericTypeDefinition() == templateType)
+                    yield return baseType;
 
-        if (pluggedType == typeof(object))
-            yield break;
-
-        if (pluggedType.GetTypeInfo().BaseType == typeof(object))
-            yield break;
-
-        foreach (Type interfaceType in pluggedType.GetTypeInfo().BaseType!.FindInterfacesThatClose(templateType))
-        {
-            yield return interfaceType;
+                current = baseType;
+            }
         }
     }
 
     private static bool IsConcrete(this Type type)
     {
-        return !type.GetTypeInfo().IsAbstract && !type.GetTypeInfo().IsInterface;
+        return type != null && !type.GetTypeInfo().IsAbstract && !type.GetTypeInfo().IsInterface;
     }
 
+    // kept for compatibility but implemented simply
     private static void Fill<T>(this List<T> list, T value)
     {
         if (list.Contains(value))
@@ -242,34 +245,48 @@ public static class ReflectionUtilities
             }
             catch (ArgumentException)
             {
-                // Let's assume it's a constrained generic type
+                // Handle constrained generic type requests for IEnumerable<T>
                 if (type.IsConstructedGenericType && type.GetGenericTypeDefinition() == typeof(IEnumerable<>))
                 {
                     Type serviceType = type.GenericTypeArguments.Single();
-                    List<Type> serviceTypes = [];
 
-                    foreach (ServiceDescriptor service in services)
+                    // Collect descriptors that match the open generic service signature
+                    List<ServiceDescriptor> matchingDescriptors = services
+                        .Where(sd => sd.ServiceType.IsGenericType &&
+                                     sd.ServiceType.GetGenericTypeDefinition() == serviceType.GetGenericTypeDefinition())
+                        .ToList();
+
+                    List<object?> instances = new();
+                    foreach (ServiceDescriptor? sd in matchingDescriptors)
                     {
-                        if (serviceType.IsConstructedGenericType && serviceType.GetGenericTypeDefinition() == service.ServiceType)
+                        try
                         {
-                            try
+                            if (sd.ImplementationType != null && sd.ImplementationType.IsGenericTypeDefinition)
                             {
-                                Type closedImplType = service.ImplementationType!.MakeGenericType(serviceType.GenericTypeArguments);
-                                serviceTypes.Add(closedImplType);
+                                Type closedImpl = sd.ImplementationType.MakeGenericType(serviceType.GenericTypeArguments);
+                                instances.Add(p.GetService(closedImpl));
                             }
-                            catch { }
+                            else if (sd.ImplementationType != null)
+                            {
+                                instances.Add(p.GetService(sd.ImplementationType));
+                            }
+                            else if (sd.ImplementationInstance != null)
+                            {
+                                instances.Add(sd.ImplementationInstance);
+                            }
+                            else if (sd.ImplementationFactory != null)
+                            {
+                                instances.Add(sd.ImplementationFactory(p));
+                            }
+                        }
+                        catch
+                        {
+                            // ignore individual failures
                         }
                     }
 
-                    services.Replace(new ServiceDescriptor(type, sp =>
-                    {
-                        return serviceTypes.Select(sp.GetService).ToArray();
-                    }, ServiceLifetime.Transient));
-
-                    var resolved = Array.CreateInstance(serviceType, serviceTypes.Count);
-
-                    Array.Copy(serviceTypes.Select(p.GetService).ToArray(), resolved, serviceTypes.Count);
-
+                    Array resolved = Array.CreateInstance(serviceType, instances.Count);
+                    Array.Copy(instances.Select(i => i).ToArray(), resolved, instances.Count);
                     return resolved;
                 }
 
